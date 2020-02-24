@@ -1,0 +1,141 @@
+---
+title: "KNN and LDA Problem Set"
+author: "Seungjun (Josh) Kim"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+## ISLR 4.7 Q10
+
+#### a. Produce some numerical and graphical summaries of the “Weekly” data. Do there appear to be any patterns ?
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(ISLR)
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+```
+
+```{r}
+summary(Weekly)
+```
+
+```{r}
+head(Weekly)
+```
+
+```{r}
+ggplot(data=Weekly, aes(x=as.factor(Year),y=Volume)) + geom_boxplot() + theme_economist()
+```
+
+The overall volume of stock transactions is increasing over time. The variability of the volume has been increasing epsecially from 2005 to 2010 as we can see from the boxes that stretch wider across the y axis in the more recent years.
+
+```{r}
+# Correlation
+cor(Weekly[, -9])
+```
+We also observe from the the correlation marix above that lag variables and returns barely have any correlation.
+
+#### b. Use the full data set to perform a logistic regression with “Direction” as the response and the five lag variables plus “Volume” as predictors. Use the summary function to print the results. Do any of the predictors appear to be statistically significant ? If so, which ones ?
+```{r}
+fit.glm <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = Weekly, family = binomial)
+summary(fit.glm)
+```
+
+Only the Lag2 variable is statistically significant as we can see from the small p-value less than the typical significance threshold of 5%.
+
+#### c. Compute the confusion matrix and overall fraction of correct predictions. Explain what the confusion matrix is telling you about the types of mistakes made by logistic regression.
+```{r}
+probabilities <- predict(fit.glm, type = "response")
+```
+
+```{r}
+pred.glm <- rep("Down", length(probabilities))
+```
+
+```{r}
+# Threshold prob value for determining up or down --> 0.5
+pred.glm[probabilities > 0.5] <- "Up"
+```
+
+```{r}
+#  Confusion matrix predicted v.s. actual
+table(pred.glm, Weekly$Direction)
+```
+
+The accuracy of the model can be calculated as the percentage of correct predictions out of the entire training data which is (54+557)/(54+48+430+557) = 56.1%. This means the training error rate is 1-56.1% = 43.9%. Precision, the proportion of correctly predicted positives out of all the observations predicted to be positive, is (557 / 430+557)=56.4%.
+We can also calculate recall could also say that for weeks when the stock price went up, the model predicted that rise correctly with 92.1% probability (557/(48+557)).
+
+#### d. Now fit the logistic regression model using a training data period from 1990 to 2008, with “Lag2” as the only predictor. Compute the confusion matrix and the overall fraction of correct predictions for the held out data (that is, the data from 2009 to 2010).
+```{r}
+train <- (Weekly$Year < 2009) #Period 1990 to 2008
+
+Weekly.hod <- Weekly[!train, ] # held out data (hod)
+fit.glm2 <- glm(Direction ~ Lag2, data = Weekly, family = binomial, subset = train)
+summary(fit.glm2)
+```
+```{r}
+probabilities2 <- predict(fit.glm2, Weekly.hod, type = "response")
+pred.glm2 <- rep("Down", length(probabilities2))
+pred.glm2[probabilities2 > 0.5] <- "Up"
+
+# confusion matrix
+table(pred.glm2, Weekly.hod$Direction)
+```
+
+Overall fraction of correct predictions for the held out data is (9+56)/104 = 0.625 = 62.5%
+
+#### e. Repeat (d) using LDA.
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(MASS)
+fit.lda <- lda(Direction ~ Lag2, data = Weekly, subset = train)
+fit.lda
+```
+
+```{r}
+pred.lda <- predict(fit.lda, Weekly.hod)
+table(pred.lda$class, Weekly.hod$Direction)
+```
+
+We got the same confusion matrix as (d), so the accuracy is the same (62.5%)
+
+#### f. Repeat (d) using QDA.
+```{r}
+fit.qda <- qda(Direction ~ Lag2, data = Weekly, subset = train)
+fit.qda
+```
+
+```{r}
+pred.qda <- predict(fit.qda, Weekly.hod)
+table(pred.qda$class, Weekly.hod$Direction)
+```
+
+Accuracy score, the percentage of correct predictions on the test data is 61 / (43+61) = 58.65%. 
+
+#### g. Repeat (d) using KNN with K=1.
+
+```{r}
+library(class)
+
+train.Direction = Weekly$Direction[train]
+
+train_X <- as.matrix(Weekly$Lag2[train])
+test_X <- as.matrix(Weekly$Lag2[!train])
+
+set.seed(42) #josh's fav number as seed
+
+pred.knn <- knn(train_X, test_X, train.Direction, k = 1)
+table(pred.knn, Weekly.hod$Direction)
+```
+```{r}
+# Accuracy for k=1 knn
+mean(pred.knn == Weekly.hod$Direction)
+```
+
+Accuracy score is 50% for k=1 knn model.
+
+#### h. Which of these methods appears to provide the best results on this data ?
+
+We see that logistic regression and LDA (62.5%) have the highest accuracy scores followed by QDA (58.6%) and KNN (0.5%).
